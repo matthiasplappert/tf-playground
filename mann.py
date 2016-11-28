@@ -1,3 +1,5 @@
+# Basic implementation of "One-shot Learning with Memory-Augmented Neural Networks",
+# Santoro et al., 2016 (https://arxiv.org/abs/1605.06065)
 import tensorflow as tf
 import numpy as np
 
@@ -60,12 +62,11 @@ class MANN(object):
             w_u = self.gamma * prev_w_u + w_r + w_w  # (batch_size, memory_shape[0])
             
             # Update w_lu.
-            sorted_w_u, sorted_w_u_indexes = tf.nn.top_k(w_u, k=memory_shape[0], sorted=True)
-            #print sorted_w_u_indexes
-            w_lu = tf.zeros_like(prev_w_lu)
-            # TODO: implement w_lu in TF
-            #print sorted_w_u[:, -nb_reads]
-
+            sorted_w_u, _ = tf.nn.top_k(w_u, k=memory_shape[0], sorted=True)
+            nth_w_u = tf.expand_dims(sorted_w_u[:, -nb_reads], -1)  # (batch_size, 1)
+            nth_w_u = tf.tile(nth_w_u, [1, self.memory_shape[0]])  # (batch_size, memory_shape[0])
+            w_lu = tf.cast(tf.less_equal(w_u, nth_w_u), self.dtype)
+            
             # Write back to memory.
             M = []
             for idx in range(self.memory_shape[0]):
@@ -156,7 +157,7 @@ train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
 
 with tf.Session() as sess:
     sess.run(tf.initialize_all_variables())
-    for i in range(1000):
+    for i in range(100000):
         xs, ys, prev_ys = generate_data(batch_size=batch_size, nb_classes=nb_classes, input_size=input_size, length=50)
         feed = {
             x: xs,

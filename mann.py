@@ -10,7 +10,7 @@ def weight_variable(shape):
 
 
 def bias_variable(dim):
-    initial = tf.constant(0.1, shape=(dim,))
+    initial = tf.constant(0., shape=(dim,))
     return tf.Variable(initial)
 
 
@@ -49,11 +49,9 @@ class MANN(object):
 
         W_g = weight_variable((self.controller_size, 1))
         b_g = bias_variable(1)
-
-        nb_reads = 1  # TODO: make flexible
         
         def step(prev, x, eps=1e-6):
-            prev_output, prev_state, prev_M, prev_r, prev_w_u, prev_w_r, prev_w_lu = prev
+            prev_output, prev_state, prev_M, prev_r, prev_w_r, _, prev_w_u, prev_w_lu = prev
             output, state = controller(tf.concat(1, [x, prev_r]), prev_state)
 
             # Compute similarity and w_r.
@@ -73,10 +71,8 @@ class MANN(object):
             w_u = self.gamma * prev_w_u + w_r + w_w  # (batch_size, memory_shape[0])
             
             # Update w_lu.
-            sorted_w_u, _ = tf.nn.top_k(w_u, k=memory_shape[0], sorted=True)
-            nth_w_u = tf.expand_dims(sorted_w_u[:, -nb_reads], -1)  # (batch_size, 1)
-            nth_w_u = tf.tile(nth_w_u, [1, self.memory_shape[0]])  # (batch_size, memory_shape[0])
-            w_lu = tf.cast(tf.less_equal(w_u, nth_w_u), self.dtype)
+            _, sorted_indexes = tf.nn.top_k(w_u, k=memory_shape[0], sorted=True)
+            w_lu = tf.one_hot(sorted_indexes[:, -1], self.memory_shape[0])
             
             # Set all least recently used memory locations to zero.
             prev_M = prev_M * (1. - tf.tile(tf.expand_dims(prev_w_lu, -1), [1, 1, self.memory_shape[1]]))
@@ -90,19 +86,19 @@ class MANN(object):
             
             # Combine into output.
             o = tf.matmul(tf.concat(1, [output, r]), W_o) + b_o  # (batch_size, self.output_size)
-            return [o, state, M, r, w_u, w_r, w_lu]
+            return [o, state, M, r, w_r, w_w, w_u, w_lu]
 
         init = [
-            tf.zeros((self.batch_size, self.output_size)),                              # outputs
-            initial_state,                                                              # states
-            tf.truncated_normal((self.batch_size,) + self.memory_shape, stddev=0.001),  # M
-            tf.zeros((self.batch_size, self.memory_shape[1])),                          # r
-            one_hot_constant((self.batch_size, self.memory_shape[0])),                  # w_u
-            one_hot_constant((self.batch_size, self.memory_shape[0])),                  # w_r
-            tf.zeros((self.batch_size, self.memory_shape[0])),                          # w_lu
+            tf.zeros((self.batch_size, self.output_size)),              # outputs
+            initial_state,                                              # states
+            tf.zeros((self.batch_size,) + self.memory_shape),           # M
+            tf.zeros((self.batch_size, self.memory_shape[1])),          # r
+            one_hot_constant((self.batch_size, self.memory_shape[0])),  # w_r
+            tf.zeros((self.batch_size, self.memory_shape[0])),          # w_w
+            one_hot_constant((self.batch_size, self.memory_shape[0])),  # w_u
+            tf.zeros((self.batch_size, self.memory_shape[0])),          # w_lu
         ]
-        outputs, states, memories, reads, w_us, w_rs, w_lus = tf.scan(step, x, initializer=init)
-        return outputs, states, memories, reads, w_us, w_rs, w_lus
+        return tf.scan(step, x, initializer=init)
 
 
 def one_hot(xs, nb_classes):
@@ -175,7 +171,7 @@ train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
 with tf.Session() as sess:
     sess.run(tf.initialize_all_variables())
     for i in range(100000):
-        xs, ys, prev_ys = generate_data(batch_size=batch_size, nb_classes=nb_classes, input_size=input_size, length=50)
+        xs, ys, prev_ys = generate_data(batch_size=batch_size, nb_classes=nb_classes, input_size=input_size, length=10)
         feed = {
             x: xs,
             y: ys,

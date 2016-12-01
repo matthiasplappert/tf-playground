@@ -162,8 +162,10 @@ diff = tf.reduce_sum(y * tf.log(y_), reduction_indices=[2, 0])
 cross_entropy = -tf.reduce_mean(diff)
 
 # Measure accuracy.
-correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
-accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+correct_prediction = tf.equal(tf.argmax(y, 2), tf.argmax(y_, 2))
+accuracy = tf.cast(correct_prediction, tf.float32)
+sequence_accuracy = tf.reduce_mean(accuracy, reduction_indices=1)
+mean_accuracy = tf.reduce_mean(accuracy)
 
 # Training.
 train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
@@ -177,5 +179,7 @@ with tf.Session() as sess:
             y: ys,
             prev_y: prev_ys,
         }
-        _, loss, acc = sess.run([train_step, cross_entropy, accuracy], feed_dict=feed)
-        print('step {}: loss={}, accuracy={}'.format(i, loss, acc))
+        _, loss, seq_acc, acc = sess.run([train_step, cross_entropy, sequence_accuracy, mean_accuracy], feed_dict=feed)
+        print('step {}:'.format(i + 1))
+        print('  loss={}\n  accuracy={}\n  sequence accuracy={}'.format(loss, acc, seq_acc))
+        print('')

@@ -14,6 +14,12 @@ def bias_variable(dim):
     return tf.Variable(initial)
 
 
+def one_hot_constant(shape, dtype=tf.float32):
+    initial = np.zeros(shape)
+    initial[..., 0] = 1.
+    return tf.constant(initial, dtype)
+
+
 class MANN(object):
     def __init__(self, output_size, batch_size, controller_size, memory_shape,
         dtype=tf.float32, gamma=.95):
@@ -74,25 +80,26 @@ class MANN(object):
             
             # Set all least recently used memory locations to zero.
             prev_M = prev_M * (1. - tf.tile(tf.expand_dims(prev_w_lu, -1), [1, 1, self.memory_shape[1]]))
-
+            
             # Write back to memory.
             M = []
             a = tf.nn.tanh(tf.matmul(output, W_a) + b_a)  # (batch_size, memory_shape[1])
             for idx in range(self.memory_shape[0]):
                 M.append(prev_M[:, idx, :] + tf.expand_dims(w_w[:, idx], -1) * a)
             M = tf.transpose(tf.pack(M), perm=[1, 0, 2])
-
+            
             # Combine into output.
             o = tf.matmul(tf.concat(1, [output, r]), W_o) + b_o  # (batch_size, self.output_size)
             return [o, state, M, r, w_u, w_r, w_lu]
+
         init = [
-            tf.zeros((self.batch_size, self.output_size)),      # outputs
-            initial_state,                                      # states
-            tf.zeros((self.batch_size,) + self.memory_shape),   # memory
-            tf.zeros((self.batch_size, self.memory_shape[1])),  # read
-            tf.zeros((self.batch_size, self.memory_shape[0])),  # usage weights
-            tf.zeros((self.batch_size, self.memory_shape[0])),  # read weights
-            tf.zeros((self.batch_size, self.memory_shape[0])),  # LU weights
+            tf.zeros((self.batch_size, self.output_size)),                              # outputs
+            initial_state,                                                              # states
+            tf.truncated_normal((self.batch_size,) + self.memory_shape, stddev=0.001),  # M
+            tf.zeros((self.batch_size, self.memory_shape[1])),                          # r
+            one_hot_constant((self.batch_size, self.memory_shape[0])),                  # w_u
+            one_hot_constant((self.batch_size, self.memory_shape[0])),                  # w_r
+            tf.zeros((self.batch_size, self.memory_shape[0])),                          # w_lu
         ]
         outputs, states, memories, reads, w_us, w_rs, w_lus = tf.scan(step, x, initializer=init)
         return outputs, states, memories, reads, w_us, w_rs, w_lus
@@ -148,7 +155,8 @@ mann = MANN(nb_classes, batch_size, controller_size, memory_shape)
 x = tf.placeholder(tf.float32, shape=(None, batch_size, input_size))
 y = tf.placeholder(tf.float32, shape=(None, batch_size, nb_classes))
 prev_y = tf.placeholder(tf.float32, shape=(None, batch_size, nb_classes))
-outputs = mann(tf.concat(2, [x, prev_y]))[0]
+all_variables = mann(tf.concat(2, [x, prev_y]))
+outputs = all_variables[0]
 
 # Add softmax over output.
 y_ = tf.nn.softmax(outputs)

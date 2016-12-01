@@ -30,8 +30,13 @@ class MANN(object):
         controller = tf.nn.rnn_cell.BasicLSTMCell(self.controller_size)
         initial_state = controller.zero_state(self.batch_size, self.dtype)
 
-        W_hk = weight_variable((self.controller_size, self.memory_shape[1]))
-        b_hk = bias_variable(self.memory_shape[1])
+        # Read head.
+        W_k = weight_variable((self.controller_size, self.memory_shape[1]))
+        b_k = bias_variable(self.memory_shape[1])
+
+        # Output for a single write head. We differ from the paper here.
+        W_a = weight_variable((self.controller_size, self.memory_shape[1]))
+        b_a = bias_variable(self.memory_shape[1])
 
         W_o = weight_variable((self.controller_size + self.memory_shape[1], self.output_size))
         b_o = bias_variable(self.output_size)
@@ -46,7 +51,7 @@ class MANN(object):
             output, state = controller(tf.concat(1, [x, prev_r]), prev_state)
 
             # Compute similarity and w_r.
-            k = tf.matmul(output, W_hk) + b_hk  # (batch_size, memory_shape[1])
+            k = tf.matmul(output, W_k) + b_k  # (batch_size, memory_shape[1])
             unnorm = tf.squeeze(tf.batch_matmul(prev_M, tf.expand_dims(k, -1)))
             k_norm2 = tf.reduce_sum(k ** 2, reduction_indices=-1, keep_dims=True)
             m_norm2 = tf.reduce_sum(prev_M ** 2, reduction_indices=-1)
@@ -72,11 +77,12 @@ class MANN(object):
 
             # Write back to memory.
             M = []
+            a = tf.matmul(output, W_a) + b_a  # (batch_size, memory_shape[1])
             for idx in range(self.memory_shape[0]):
-                M.append(prev_M[:, idx, :] + tf.expand_dims(w_w[:, idx], -1) * k)
+                M.append(prev_M[:, idx, :] + tf.expand_dims(w_w[:, idx], -1) * a)
             M = tf.transpose(tf.pack(M), perm=[1, 0, 2])
 
-            # Classifier.
+            # Combine into output.
             o = tf.matmul(tf.concat(1, [output, r]), W_o) + b_o  # (batch_size, self.output_size)
             return [o, state, M, r, w_u, w_r, w_lu]
         init = [

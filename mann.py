@@ -171,7 +171,7 @@ train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
 with tf.Session() as sess:
     sess.run(tf.initialize_all_variables())
     for i in range(100000):
-        xs, ys, prev_ys = generate_data(batch_size=batch_size, nb_classes=nb_classes, input_size=input_size, length=10)
+        xs, ys, prev_ys = generate_data(batch_size=batch_size, nb_classes=nb_classes, input_size=input_size, length=50)
         feed = {
             x: xs,
             y: ys,

@@ -33,7 +33,7 @@ class MANN(object):
         W_hk = weight_variable((self.controller_size, self.memory_shape[1]))
         b_hk = bias_variable(self.memory_shape[1])
 
-        W_o = weight_variable((self.memory_shape[1], self.output_size))
+        W_o = weight_variable((self.controller_size + self.memory_shape[1], self.output_size))
         b_o = bias_variable(self.output_size)
 
         W_g = weight_variable((self.controller_size, 1))
@@ -77,7 +77,7 @@ class MANN(object):
             M = tf.transpose(tf.pack(M), perm=[1, 0, 2])
 
             # Classifier.
-            o = tf.matmul(r, W_o) + b_o  # (batch_size, self.output_size)
+            o = tf.matmul(tf.concat(1, [output, r]), W_o) + b_o  # (batch_size, self.output_size)
             return [o, state, M, r, w_u, w_r, w_lu]
         init = [
             tf.zeros((self.batch_size, self.output_size)),      # outputs

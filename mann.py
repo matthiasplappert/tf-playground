@@ -67,6 +67,9 @@ class MANN(object):
             nth_w_u = tf.tile(nth_w_u, [1, self.memory_shape[0]])  # (batch_size, memory_shape[0])
             w_lu = tf.cast(tf.less_equal(w_u, nth_w_u), self.dtype)
             
+            # Set all least recently used memory locations to zero.
+            prev_M = prev_M * (1. - tf.tile(tf.expand_dims(w_lu, -1), [1, 1, self.memory_shape[1]]))
+
             # Write back to memory.
             M = []
             for idx in range(self.memory_shape[0]):
